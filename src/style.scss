@@ -1,0 +1,24 @@
+:root {
+	font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+	line-height: 1.5;
+	font-weight: 400;
+}
+
+* {
+	margin: 0;
+	padding: 0in;
+}
+
+body {
+	scroll-behavior: none;
+	background-color: #0101;
+}
+
+#app {
+	width: 100vw;
+	height: 100vh;
+}
+
+canvas {
+	display: block;
+}
