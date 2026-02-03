@@ -38,6 +38,14 @@ export default class Sketch {
 		this.time = 0;
 		this.clock = new THREE.Clock();
 
+		// Mouse tracking
+		this.mouse = new THREE.Vector2();
+		this.mouseLerped = new THREE.Vector2();
+		this.mouseVelocity = new THREE.Vector3();
+		this.prevRayOrigin = new THREE.Vector3();
+		this.raycaster = new THREE.Raycaster();
+		window.addEventListener('mousemove', this.onMouseMove.bind(this));
+
 		this.render();
 
 		// Resize
@@ -47,6 +55,8 @@ export default class Sketch {
 	addControls() {
 		this.controls = new OrbitControls(this.camera, this.canvas);
 		this.controls.enableDamping = true;
+		this.controls.target.copy(this.cameraLookAt);
+		this.controls.update();
 	}
 
 	addCamera() {
@@ -56,15 +66,36 @@ export default class Sketch {
 			0.01,
 			500
 		);
-		this.camera.position.set(0, 5, 75);
+		this.cameraParams = {
+			posX: -20,
+			posY: -15,
+			posZ: 78,
+			lookX: 0,
+			lookY: 22,
+			lookZ: 0,
+			rotZ: -47,
+		};
+		this.camera.position.set(
+			this.cameraParams.posX,
+			this.cameraParams.posY,
+			this.cameraParams.posZ
+		);
+		this.cameraLookAt = new THREE.Vector3(
+			this.cameraParams.lookX,
+			this.cameraParams.lookY,
+			this.cameraParams.lookZ
+		);
+		this.camera.lookAt(this.cameraLookAt);
 	}
 
 	addMesh() {
 		// DNA parameters
 		this.dnaParams = {
-			numHelix: 4000,
+			// numHelix: 50000,
+			numHelix: 10000,
 			numLineSpace: 35,
-			numLine: 100,
+			numLine: 200,
+			// numLine: 700,
 			helixLength: 170,
 			helixRadius: 18,
 			rotationSpeed: 0.2,
@@ -72,6 +103,13 @@ export default class Sketch {
 			scaleBase: 0.8,
 			scaleAmplitude: 0.2,
 			scaleSpeed: 4.0,
+			mouseRadius: 20,
+			mouseStrength: 10,
+			mouseLerp: 0.03,
+			trailStrength: 13,
+			entryDuration: 2.0,
+			entrySpread: 500,
+			entryStagger: 0,
 		};
 
 		// Create the DNA double helix with particles
@@ -95,10 +133,13 @@ export default class Sketch {
 
 		// Initialize buffers
 		const positions = new Float32Array(numAmount * 3);
+		const randomPositions = new Float32Array(numAmount * 3);
 		const scales = new Float32Array(numAmount * 3);
 		const radians = new Float32Array(numAmount);
 		const radiuses = new Float32Array(numAmount);
 		const delays = new Float32Array(numAmount);
+
+		const spread = this.dnaParams.entrySpread;
 
 		// Create helix strands
 		for (let i = 0; i < numHelix; i++) {
@@ -106,6 +147,10 @@ export default class Sketch {
 			positions[i * 3] = (t * 2 - 1) * helixLength + randomOffset(3);
 			positions[i * 3 + 1] = randomOffset(3);
 			positions[i * 3 + 2] = randomOffset(3);
+			// Random spread positions for entry animation
+			randomPositions[i * 3] = (Math.random() - 0.5) * spread;
+			randomPositions[i * 3 + 1] = (Math.random() - 0.5) * spread;
+			randomPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
 			scales[i * 3] = randomOffset(3);
 			scales[i * 3 + 1] = randomOffset(3);
 			scales[i * 3 + 2] = randomOffset(3);
@@ -125,6 +170,10 @@ export default class Sketch {
 				positions[idx * 3] = (t * 2 - 1) * helixLength + randomOffset(1);
 				positions[idx * 3 + 1] = randomOffset(1);
 				positions[idx * 3 + 2] = randomOffset(1);
+				// Random spread positions for entry animation
+				randomPositions[idx * 3] = (Math.random() - 0.5) * spread;
+				randomPositions[idx * 3 + 1] = (Math.random() - 0.5) * spread;
+				randomPositions[idx * 3 + 2] = (Math.random() - 0.5) * spread;
 				scales[idx * 3] = randomOffset(3);
 				scales[idx * 3 + 1] = randomOffset(3);
 				scales[idx * 3 + 2] = randomOffset(3);
@@ -137,6 +186,10 @@ export default class Sketch {
 		// Build geometry
 		const geometry = new THREE.BufferGeometry();
 		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		geometry.setAttribute(
+			'randomPos',
+			new THREE.BufferAttribute(randomPositions, 3)
+		);
 		geometry.setAttribute('scale', new THREE.BufferAttribute(scales, 3));
 		geometry.setAttribute('radian', new THREE.BufferAttribute(radians, 1));
 		geometry.setAttribute('radius', new THREE.BufferAttribute(radiuses, 1));
@@ -146,11 +199,19 @@ export default class Sketch {
 		const material = new THREE.ShaderMaterial({
 			uniforms: {
 				time: { value: 0 },
+				entryProgress: { value: 0 },
+				entryStagger: { value: this.dnaParams.entryStagger },
 				rotationSpeed: { value: this.dnaParams.rotationSpeed },
 				wiggleSpeed: { value: this.dnaParams.wiggleSpeed },
 				scaleBase: { value: this.dnaParams.scaleBase },
 				scaleAmplitude: { value: this.dnaParams.scaleAmplitude },
 				scaleSpeed: { value: this.dnaParams.scaleSpeed },
+				rayOrigin: { value: new THREE.Vector3() },
+				rayDir: { value: new THREE.Vector3(0, 0, -1) },
+				mouseVelocity: { value: new THREE.Vector3() },
+				mouseRadius: { value: this.dnaParams.mouseRadius },
+				mouseStrength: { value: this.dnaParams.mouseStrength },
+				trailStrength: { value: this.dnaParams.trailStrength },
 			},
 			vertexShader: dnaVertexShader,
 			fragmentShader: dnaFragmentShader,
@@ -160,8 +221,6 @@ export default class Sketch {
 
 		this.dnaParticles = new THREE.Points(geometry, material);
 		this.scene.add(this.dnaParticles);
-
-		console.log(this.dnaParticles);
 	}
 
 	addDebug() {
@@ -171,7 +230,7 @@ export default class Sketch {
 		geometryFolder
 			.addBinding(this.dnaParams, 'numHelix', {
 				min: 1000,
-				max: 10000,
+				max: 100000,
 				step: 100,
 				label: 'Helix Particles',
 			})
@@ -187,8 +246,8 @@ export default class Sketch {
 		geometryFolder
 			.addBinding(this.dnaParams, 'numLine', {
 				min: 20,
-				max: 200,
-				step: 10,
+				max: 1000,
+				step: 50,
 				label: 'Base Pair Density',
 			})
 			.on('change', () => this.createDNA());
@@ -272,6 +331,150 @@ export default class Sketch {
 					this.dnaParticles.material.uniforms.scaleSpeed.value = ev.value;
 				}
 			});
+
+		const mouseFolder = pane.addFolder({ title: 'Mouse' });
+		mouseFolder
+			.addBinding(this.dnaParams, 'mouseRadius', {
+				min: 5,
+				max: 50,
+				step: 1,
+				label: 'Radius',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.mouseRadius.value = ev.value;
+				}
+			});
+		mouseFolder
+			.addBinding(this.dnaParams, 'mouseStrength', {
+				min: 0,
+				max: 30,
+				step: 1,
+				label: 'Strength',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.mouseStrength.value = ev.value;
+				}
+			});
+		mouseFolder.addBinding(this.dnaParams, 'mouseLerp', {
+			min: 0.01,
+			max: 1,
+			step: 0.01,
+			label: 'Smoothness',
+		});
+		mouseFolder
+			.addBinding(this.dnaParams, 'trailStrength', {
+				min: 0,
+				max: 20,
+				step: 1,
+				label: 'Trail',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.trailStrength.value = ev.value;
+				}
+			});
+
+		const entryFolder = pane.addFolder({ title: 'Entry Animation' });
+		entryFolder.addBinding(this.dnaParams, 'entryDuration', {
+			min: 0.5,
+			max: 10,
+			step: 0.1,
+			label: 'Duration',
+		});
+		entryFolder
+			.addBinding(this.dnaParams, 'entryStagger', {
+				min: 0,
+				max: 1,
+				step: 0.05,
+				label: 'Stagger',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.entryStagger.value = ev.value;
+				}
+			});
+		entryFolder
+			.addBinding(this.dnaParams, 'entrySpread', {
+				min: 50,
+				max: 300,
+				step: 10,
+				label: 'Spread',
+			})
+			.on('change', () => this.createDNA());
+		entryFolder.addButton({ title: 'Replay' }).on('click', () => {
+			this.clock = new THREE.Clock();
+		});
+
+		const cameraFolder = pane.addFolder({ title: 'Camera' });
+		const updateCamera = () => {
+			this.camera.position.set(
+				this.cameraParams.posX,
+				this.cameraParams.posY,
+				this.cameraParams.posZ
+			);
+			this.controls.target.set(
+				this.cameraParams.lookX,
+				this.cameraParams.lookY,
+				this.cameraParams.lookZ
+			);
+			this.controls.update();
+		};
+		cameraFolder
+			.addBinding(this.cameraParams, 'posX', {
+				min: -100,
+				max: 100,
+				label: 'Pos X',
+			})
+			.on('change', updateCamera);
+		cameraFolder
+			.addBinding(this.cameraParams, 'posY', {
+				min: -100,
+				max: 100,
+				label: 'Pos Y',
+			})
+			.on('change', updateCamera);
+		cameraFolder
+			.addBinding(this.cameraParams, 'posZ', {
+				min: 20,
+				max: 150,
+				label: 'Pos Z',
+			})
+			.on('change', updateCamera);
+		cameraFolder
+			.addBinding(this.cameraParams, 'lookX', {
+				min: -100,
+				max: 100,
+				label: 'Look X',
+			})
+			.on('change', updateCamera);
+		cameraFolder
+			.addBinding(this.cameraParams, 'lookY', {
+				min: -100,
+				max: 100,
+				label: 'Look Y',
+			})
+			.on('change', updateCamera);
+		cameraFolder
+			.addBinding(this.cameraParams, 'lookZ', {
+				min: -50,
+				max: 50,
+				label: 'Look Z',
+			})
+			.on('change', updateCamera);
+		cameraFolder
+			.addBinding(this.cameraParams, 'rotZ', {
+				min: -180,
+				max: 180,
+				label: 'Roll',
+			})
+			.on('change', updateCamera);
+	}
+
+	onMouseMove(event) {
+		this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
+		this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
 	}
 
 	addAnim() {
@@ -279,6 +482,36 @@ export default class Sketch {
 
 		if (this.dnaParticles) {
 			this.dnaParticles.material.uniforms.time.value = elapsedTime;
+
+			// Entry animation progress (0 to 1)
+			const entryProgress = Math.min(
+				elapsedTime / this.dnaParams.entryDuration,
+				1.0
+			);
+			this.dnaParticles.material.uniforms.entryProgress.value = entryProgress;
+
+			// Lerp mouse position for smooth trailing effect
+			this.mouseLerped.lerp(this.mouse, this.dnaParams.mouseLerp);
+
+			// Update mouse ray for depth-aware interaction
+			this.raycaster.setFromCamera(this.mouseLerped, this.camera);
+
+			// Calculate velocity from ray origin movement
+			this.mouseVelocity.subVectors(
+				this.raycaster.ray.origin,
+				this.prevRayOrigin
+			);
+			this.prevRayOrigin.copy(this.raycaster.ray.origin);
+
+			this.dnaParticles.material.uniforms.rayOrigin.value.copy(
+				this.raycaster.ray.origin
+			);
+			this.dnaParticles.material.uniforms.rayDir.value.copy(
+				this.raycaster.ray.direction
+			);
+			this.dnaParticles.material.uniforms.mouseVelocity.value.copy(
+				this.mouseVelocity
+			);
 		}
 	}
 
@@ -301,6 +534,9 @@ export default class Sketch {
 
 		// Update controls
 		this.controls.update();
+
+		// Apply camera roll after controls update
+		this.camera.rotation.z = (this.cameraParams.rotZ * Math.PI) / 180;
 
 		this.renderer.render(this.scene, this.camera);
 		window.requestAnimationFrame(this.render.bind(this));
