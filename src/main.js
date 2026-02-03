@@ -110,6 +110,7 @@ export default class Sketch {
 			entryDuration: 2.0,
 			entrySpread: 500,
 			entryStagger: 0,
+			particleColor: { r: 74, g: 182, b: 173 },
 		};
 
 		// Create the DNA double helix with particles
@@ -212,6 +213,13 @@ export default class Sketch {
 				mouseRadius: { value: this.dnaParams.mouseRadius },
 				mouseStrength: { value: this.dnaParams.mouseStrength },
 				trailStrength: { value: this.dnaParams.trailStrength },
+				particleColor: {
+					value: new THREE.Vector3(
+						this.dnaParams.particleColor.r,
+						this.dnaParams.particleColor.g,
+						this.dnaParams.particleColor.b
+					),
+				},
 			},
 			vertexShader: dnaVertexShader,
 			fragmentShader: dnaFragmentShader,
@@ -267,6 +275,20 @@ export default class Sketch {
 				label: 'Helix Radius',
 			})
 			.on('change', () => this.createDNA());
+		geometryFolder
+			.addBinding(this.dnaParams, 'particleColor', {
+				label: 'Particle Color',
+				color: { type: 'int' },
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.particleColor.value.set(
+						ev.value.r,
+						ev.value.g,
+						ev.value.b
+					);
+				}
+			});
 
 		const animationFolder = pane.addFolder({ title: 'Animation' });
 		animationFolder

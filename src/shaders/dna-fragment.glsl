@@ -1,6 +1,8 @@
 varying float vDelay;
 varying float vEntryOpacity;
 
+uniform vec3 particleColor;
+
 float random (vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898,78.233)))*43758.5453123);
 }
@@ -18,6 +20,6 @@ void main() {
     float softCircle = 1.0 - smoothstep(0.1, 0.5, radius);
 
     // Combine both layers for soft, glowing particles
-    vec3 vColor = vec3(1.0, 1.0, 1.0);
+    vec3 vColor = particleColor / 255.0;
     gl_FragColor = vec4(vColor, softCircle * opacity * vEntryOpacity);
 }
