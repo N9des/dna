@@ -12,10 +12,10 @@
     "vite": "^4.4.5"
   },
   "dependencies": {
-    "lil-gui": "^0.18.2",
     "prettier": "^3.0.3",
     "sass": "^1.68.0",
     "three": "^0.156.1",
+    "tweakpane": "^4.0.5",
     "vite-plugin-glsl": "^1.1.2"
   }
 }
