@@ -3,12 +3,17 @@ attribute float radius;
 attribute float delay;
 
 uniform float time;
+uniform float rotationSpeed;
+uniform float wiggleSpeed;
+uniform float scaleBase;
+uniform float scaleAmplitude;
+uniform float scaleSpeed;
 
 varying float vDelay;
 
 void main() {
-    float wiggle = sin(time * 4.0 + delay);
-    float animRadian = radian + time * 0.4;
+    float wiggle = sin(time * wiggleSpeed + delay);
+    float animRadian = radian + time * rotationSpeed;
     float animRadius = radius + wiggle;
 
     vec3 pos = position + vec3(
@@ -21,5 +26,7 @@ void main() {
 
     vDelay = delay;
     gl_Position = projectionMatrix * mvPos;
-    gl_PointSize = 1000.0 / length(mvPos.xyz) * 1.6;
+
+    float scaleAnim = scaleBase + scaleAmplitude * sin(time * scaleSpeed + delay);
+    gl_PointSize = 1000.0 / length(mvPos.xyz) * scaleAnim;
 }

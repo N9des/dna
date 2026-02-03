@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import * as dat from 'lil-gui';
+import { Pane } from 'tweakpane';
 
 import dnaVertexShader from './shaders/dna-vertex.glsl';
 import dnaFragmentShader from './shaders/dna-fragment.glsl';
@@ -24,6 +24,7 @@ export default class Sketch {
 
 		// Init scene
 		this.scene = new THREE.Scene();
+		this.scene.background = new THREE.Color(0x224745);
 
 		this.addCamera();
 
@@ -53,7 +54,7 @@ export default class Sketch {
 			70,
 			this.sizes.width / this.sizes.height,
 			0.01,
-			100
+			500
 		);
 		this.camera.position.set(0, 5, 75);
 	}
@@ -61,13 +62,16 @@ export default class Sketch {
 	addMesh() {
 		// DNA parameters
 		this.dnaParams = {
-			numHelix: 6000,
-			numLineSpace: 60,
+			numHelix: 4000,
+			numLineSpace: 35,
 			numLine: 100,
-			helixLength: 150,
+			helixLength: 170,
 			helixRadius: 18,
-			rotationSpeed: 0.4,
-			wiggleSpeed: 4.0,
+			rotationSpeed: 0.2,
+			wiggleSpeed: 2.0,
+			scaleBase: 0.8,
+			scaleAmplitude: 0.2,
+			scaleSpeed: 4.0,
 		};
 
 		// Create the DNA double helix with particles
@@ -99,9 +103,9 @@ export default class Sketch {
 		// Create helix strands
 		for (let i = 0; i < numHelix; i++) {
 			const t = i / numHelix;
-			positions[i * 3] = (t * 2 - 1) * helixLength + randomOffset(6);
-			positions[i * 3 + 1] = randomOffset(6);
-			positions[i * 3 + 2] = randomOffset(6);
+			positions[i * 3] = (t * 2 - 1) * helixLength + randomOffset(3);
+			positions[i * 3 + 1] = randomOffset(3);
+			positions[i * 3 + 2] = randomOffset(3);
 			scales[i * 3] = randomOffset(3);
 			scales[i * 3 + 1] = randomOffset(3);
 			scales[i * 3 + 2] = randomOffset(3);
@@ -142,6 +146,11 @@ export default class Sketch {
 		const material = new THREE.ShaderMaterial({
 			uniforms: {
 				time: { value: 0 },
+				rotationSpeed: { value: this.dnaParams.rotationSpeed },
+				wiggleSpeed: { value: this.dnaParams.wiggleSpeed },
+				scaleBase: { value: this.dnaParams.scaleBase },
+				scaleAmplitude: { value: this.dnaParams.scaleAmplitude },
+				scaleSpeed: { value: this.dnaParams.scaleSpeed },
 			},
 			vertexShader: dnaVertexShader,
 			fragmentShader: dnaFragmentShader,
@@ -156,55 +165,113 @@ export default class Sketch {
 	}
 
 	addDebug() {
-		const gui = new dat.GUI();
+		const pane = new Pane();
 
-		gui
-			.add(this.dnaParams, 'numHelix')
-			.min(1000)
-			.max(10000)
-			.step(100)
-			.name('Helix Particles')
-			.onChange(() => this.createDNA());
-		gui
-			.add(this.dnaParams, 'numLineSpace')
-			.min(20)
-			.max(100)
-			.step(5)
-			.name('Base Pairs')
-			.onChange(() => this.createDNA());
-		gui
-			.add(this.dnaParams, 'numLine')
-			.min(20)
-			.max(200)
-			.step(10)
-			.name('Base Pair Density')
-			.onChange(() => this.createDNA());
-		gui
-			.add(this.dnaParams, 'helixLength')
-			.min(50)
-			.max(300)
-			.step(10)
-			.name('Helix Length')
-			.onChange(() => this.createDNA());
-		gui
-			.add(this.dnaParams, 'helixRadius')
-			.min(5)
-			.max(50)
-			.step(1)
-			.name('Helix Radius')
-			.onChange(() => this.createDNA());
-		gui
-			.add(this.dnaParams, 'rotationSpeed')
-			.min(0)
-			.max(2)
-			.step(0.01)
-			.name('Rotation Speed');
-		gui
-			.add(this.dnaParams, 'wiggleSpeed')
-			.min(0)
-			.max(10)
-			.step(0.1)
-			.name('Wiggle Speed');
+		const geometryFolder = pane.addFolder({ title: 'Geometry' });
+		geometryFolder
+			.addBinding(this.dnaParams, 'numHelix', {
+				min: 1000,
+				max: 10000,
+				step: 100,
+				label: 'Helix Particles',
+			})
+			.on('change', () => this.createDNA());
+		geometryFolder
+			.addBinding(this.dnaParams, 'numLineSpace', {
+				min: 20,
+				max: 100,
+				step: 5,
+				label: 'Base Pairs',
+			})
+			.on('change', () => this.createDNA());
+		geometryFolder
+			.addBinding(this.dnaParams, 'numLine', {
+				min: 20,
+				max: 200,
+				step: 10,
+				label: 'Base Pair Density',
+			})
+			.on('change', () => this.createDNA());
+		geometryFolder
+			.addBinding(this.dnaParams, 'helixLength', {
+				min: 50,
+				max: 300,
+				step: 10,
+				label: 'Helix Length',
+			})
+			.on('change', () => this.createDNA());
+		geometryFolder
+			.addBinding(this.dnaParams, 'helixRadius', {
+				min: 5,
+				max: 50,
+				step: 1,
+				label: 'Helix Radius',
+			})
+			.on('change', () => this.createDNA());
+
+		const animationFolder = pane.addFolder({ title: 'Animation' });
+		animationFolder
+			.addBinding(this.dnaParams, 'rotationSpeed', {
+				min: 0,
+				max: 2,
+				step: 0.01,
+				label: 'Rotation Speed',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.rotationSpeed.value = ev.value;
+				}
+			});
+		animationFolder
+			.addBinding(this.dnaParams, 'wiggleSpeed', {
+				min: 0,
+				max: 10,
+				step: 0.1,
+				label: 'Wiggle Speed',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.wiggleSpeed.value = ev.value;
+				}
+			});
+
+		const scaleFolder = pane.addFolder({ title: 'Scale' });
+		scaleFolder
+			.addBinding(this.dnaParams, 'scaleBase', {
+				min: 0.1,
+				max: 2.0,
+				step: 0.1,
+				label: 'Base',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.scaleBase.value = ev.value;
+				}
+			});
+		scaleFolder
+			.addBinding(this.dnaParams, 'scaleAmplitude', {
+				min: 0,
+				max: 1.0,
+				step: 0.05,
+				label: 'Amplitude',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.scaleAmplitude.value = ev.value;
+				}
+			});
+		scaleFolder
+			.addBinding(this.dnaParams, 'scaleSpeed', {
+				min: 0,
+				max: 10,
+				step: 0.1,
+				label: 'Speed',
+			})
+			.on('change', (ev) => {
+				if (this.dnaParticles) {
+					this.dnaParticles.material.uniforms.scaleSpeed.value = ev.value;
+				}
+			});
 	}
 
 	addAnim() {
